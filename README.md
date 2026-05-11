@@ -44,13 +44,11 @@ Group5_DDM_Final_Project/
 ├── report/
 │   ├── Phase2_IEEE_Paper.tex          Main IEEE paper (LaTeX source)
 │   ├── Phase0_Academic_Foundation.md  Literature review & hypothesis framework
-│   └── Revision_Suggestions.md       Reviewer notes (internal reference)
 └── output/
     ├── customers_scored.csv           All 8,000 customers with churn probability & risk tier
     ├── ecommerce_churn_dashboard_p2.png  Summary dashboard figure
     └── fig_m*.png                     Per-module publication figures (pre-generated)
 ```
-
 ---
 
 ## How to Run
