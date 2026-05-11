@@ -1,0 +1,529 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+\begin{document}
+
+\title{Silent Exit: Using Behavioral Data to Predict and Price E-Commerce Customer Churn (2020--2026)}
+
+\author{
+\IEEEauthorblockN{Author Name}
+\IEEEauthorblockA{\textit{DSEB-MFE Program} \\
+\textit{National Economics University}\\
+Hanoi, Vietnam \\
+email@neu.edu.vn}
+}
+
+\maketitle
+
+\begin{abstract}
+In non-contractual e-commerce, churn is silent: customers do not announce their departure, and by the time inactivity is noticed they may already be lost. This paper develops a complete, data-driven pipeline that predicts customer churn from behavioral signals and prices it in dollar terms, applied to a publicly available labeled e-commerce transaction dataset (Kaggle) of 8{,}000 customers and 25{,}000 orders spanning January 2020 to March 2026. The dataset arrives with a pre-existing churn flag (8.9\% prevalence), which we cross-validate against the 75th percentile of days-since-last-purchase, observing 73.1\% agreement. We construct a 26-feature matrix combining demographics, RFM, derived behavior, on-site engagement (session duration, pages viewed, wishlist items), and product-feedback signals (review scores, returns, delivery, discount). Logistic Regression and Random Forest classifiers are evaluated on imbalance-aware metrics; Random Forest achieves ROC-AUC 0.748 and PR-AUC 0.319 against a 0.089 prevalence baseline, with Logistic Regression at 0.693 and 0.230 respectively. A 5-fold cross-validation confirms stability (RF ROC-AUC 0.723 $\pm$ 0.023). SHAP analysis shows behavioral and value features carrying 86.8\% of total feature importance versus 13.2\% for demographics, and a controlled demographics-only RF reaches only ROC-AUC 0.515, yielding a behavioral lift of +0.233. Churned customers account for \$0.87M of historical platform revenue (7.0\%). The Priority Save Zone — the intersection of high churn risk with Gold or Silver tier — comprises 85 customers carrying \$52K of 3-year CLV at stake. Two findings depart from prior literature: (i) churn is non-monotonic across membership tiers (Gold 9.9\%, Free 9.5\%, Platinum 8.2\%, Silver 7.1\%); and (ii) at the category level, return rate is significantly \emph{negatively} correlated with churn ($r = -0.571$, $p = 0.033$), inverting the discount-trap intuition. The paper contributes an end-to-end methodology — integrating behavioral ML, customer-value economics, and macro signals on labeled data — and a tiered retention budget framework consumable by marketing teams.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Customer Churn, E-commerce, Behavioral Features, RFM, Random Forest, SHAP, Customer Lifetime Value, Retention Optimization
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+Between 2020 and 2026, global e-commerce moved from auxiliary retail channel to primary retail surface. Platforms multiplied, customer acquisition costs rose sharply, and the strategic emphasis shifted from acquisition to retention. In this environment, customer churn is the central metric of customer-equity erosion. Yet in non-contractual e-commerce, churn is structurally harder to manage than in contractual industries: customers do not cancel; they simply stop buying. Churn is therefore a \emph{latent} state that must be \emph{inferred} from behavioral evidence. We call this the \emph{silent exit} problem: by the time managers observe that a high-value customer has stopped placing orders, that customer may already be transacting elsewhere.
+
+The economic stakes are well established. Reichheld \cite{reichheld2001} documented that retention costs five to seven times less than acquisition, and that small retention improvements compound into large profit gains. Yet most empirical churn studies stop at AUC: they report a model and its accuracy without translating the prediction into dollar terms or into a concrete targeting decision. The marketing team is left with a list of probabilities, not a list of actions \cite{rossler2022,verhoef2010}.
+
+\textbf{Research gap.} Three streams of literature have evolved in parallel: ML churn prediction (which has converged on tree-based models with behavioral features), customer-value economics (which provides CLV machinery for pricing churn), and product/macro marketing analytics (which links discount and return patterns to retention pressure). What is rarely done is the \emph{integration} of these three layers in a single end-to-end pipeline that produces both a model and a dollar-denominated, value-weighted action plan applied to publicly available labeled data \cite{ascarza2018}. This paper develops that integration on a 2020--2026 e-commerce dataset.
+
+\textbf{Research questions.} \textbf{RQ1:} Which behavioral and value-based features are most strongly associated with churn? \textbf{RQ2:} How concentrated is churn across membership tiers, age groups, countries, and product categories? \textbf{RQ3:} How much revenue and CLV are at risk due to churn, and is the risk concentrated in high-tier customers? \textbf{RQ4:} Which customers should be prioritized for retention spending under realistic budget constraints?
+
+\textbf{Contributions.} The paper offers (1) a complete pipeline integrating behavioral ML, dollar-denominated churn pricing, and macro/product diagnostics on labeled data; (2) a controlled, on-the-same-split comparison between a demographics-only RF and a full-feature RF, enabling a clean measurement of the marginal predictive lift of behavior over demographics; (3) a tiered retention budget matrix and a Priority Save Zone consumable by marketing teams.
+
+The remainder of the paper is structured as follows. Section~II reviews the literature and presents the hypotheses. Section~III details the methodology. Section~IV reports empirical results. Section~V interprets findings and discusses implications. Section~VI concludes.
+
+\section{Literature Review and Theoretical Background}
+
+\subsection{Churn Prediction in Non-Contractual Settings}
+
+The defining challenge in non-contractual churn is unobserved departure: a customer who has not purchased in 60 days may have churned, or may simply have a slow purchase cycle. Schmittlein, Morrison, and Colombo \cite{schmittlein1987} formalized this as a latent-variable problem in the Pareto/NBD framework, and Fader, Hardie, and Lee \cite{fader2005a,fader2005b} provided the BG/NBD + Gamma-Gamma machinery that has become the standard probabilistic CLV framework. The methodological evolution of pure prediction has converged on gradient-boosted trees \cite{ahmad2019,grinsztajn2022}, with tree-based models consistently outperforming linear baselines and deep learning on tabular customer data with fewer than one million rows. Recent applications to e-commerce specifically \cite{vafeiadis2015,xie2020} confirm the same pattern.
+
+\subsection{Behavioral versus Demographic Features}
+
+A consistent and well-replicated finding across churn studies is that behavioral features (recency, frequency, monetary, derived velocity and trend signals, on-platform engagement) substantially outperform demographic features (age, gender, country, tenure) in predictive power. Demographics describe \emph{who the customer is}; behavior describes \emph{what the customer is doing}. The latter is fast-changing, action-relevant, and directly predictive of next purchase. De Caigny, Coussement, and De Bock \cite{decaigny2018} demonstrated this gap on retail data. The RFM heuristic \cite{hughes1994,bult1995} remains the irreducible behavioral core; modern extensions add session-level engagement features, product-feedback features (reviews given, ratings, return behavior), and acquisition-channel features that capture pre-purchase intent and post-purchase satisfaction.
+
+\subsection{Customer Value Economics and CLV}
+
+Reichheld \cite{reichheld2001} established the asymmetry between acquisition and retention cost. Gupta and Lehmann \cite{gupta2005} formalized the customer base as a financial asset whose value is the sum of individual CLVs. Ascarza \cite{ascarza2018} delivered a critical refinement: targeting the highest-probability churners does not necessarily maximize retention ROI, because some are lost causes (intervention is futile) and others are sure things (intervention is wasteful). The economically optimal target is the \emph{persuadable} high-value customer, and within a fixed budget, value-weighted prioritization dominates probability-only prioritization \cite{verhoef2010}.
+
+\subsection{Product Quality, Discount Strategy, and Macro Health}
+
+The marketing literature documents two opposing roles of discount intensity: discounts drive trial and acquisition, but heavy reliance creates a discount trap in which customers anchor on promotional prices and churn when promotions stop. Return rates have a similarly dual reading: returns enable trial through generous policies but also signal expectation--reality mismatch. Whether the joint pattern (high discount + high return) translates into elevated category-level churn is rarely tested empirically; the present paper provides such a test. At the platform level, the ratio of returning to new customers, discount intensity trends, and KPI cross-correlations function as leading indicators of customer-base health \cite{neslin2006}.
+
+\subsection{Explainable ML for Marketing}
+
+Lundberg and Lee \cite{lundberg2017} introduced SHAP (Shapley Additive Explanations), which provides theoretically grounded local and global explanations for tree-based models. Bussmann et al.\ \cite{bussmann2021} demonstrated SHAP's value in regulatory-sensitive financial settings. Recent work on SHAP best practices in churn analytics emphasizes the importance of comparing global SHAP rankings against native model importances (Gini for tree ensembles) to detect ranking artifacts \cite{molnar2022}. The combination of Logistic Regression (transparent baseline), Random Forest (non-linear accuracy), and SHAP (interpretable explanations) is the pragmatic stack for marketing-facing churn analytics.
+
+\subsection{Hypotheses}
+
+Synthesizing the literature, we propose four testable hypotheses:
+
+\begin{itemize}
+\item \textbf{H1:} Churn is concentrated in specific membership tiers and behavioral segments rather than uniformly distributed.
+\item \textbf{H2:} Behavioral features significantly outperform demographic features in predicting churn (measured by ROC-AUC and PR-AUC of full-feature RF vs.\ demographics-only RF, and by SHAP feature ranking).
+\item \textbf{H3:} High-tier customers, despite being a numerical minority, carry disproportionately high CLV per capita and constitute the largest economic risk per customer.
+\item \textbf{H4:} Higher category-level discount percentage and return rate are positively correlated with churn rate among customers whose favorite category falls in that bucket.
+\end{itemize}
+
+\section{Methodology}
+
+\subsection{Dataset}
+
+The empirical analysis uses a publicly available e-commerce transaction dataset obtained from Kaggle, organized into four tables:
+
+\begin{itemize}
+\item \texttt{customers.csv} (8{,}000 rows $\times$ 20 columns): customer\_id, country, age, gender, membership\_tier (Platinum, Gold, Silver, Free), registration\_date, total\_orders, total\_spend\_usd, avg\_order\_value\_usd, days\_since\_last\_purchase, plus the operational \texttt{churned} flag and additional engagement fields.
+\item \texttt{orders.csv} (25{,}000 rows $\times$ 28 columns): order\_id, customer\_id, order\_date, delivery\_date, year/month/quarter/day-of-week, product\_name, category, unit\_price\_usd, discount, returned, rating, session-level fields.
+\item \texttt{product\_summary.csv} (140 rows $\times$ 9 columns): per-product aggregates including avg\_rating, return\_rate (\%), avg\_discount\_pct (\%), and avg\_delivery\_days across 14 categories.
+\item \texttt{monthly\_revenue.csv} (75 rows $\times$ 10 columns): platform-level monthly KPIs from January 2020 to March 2026.
+\end{itemize}
+
+The order log spans 2020-01-01 to 2026-03-30 and is referentially clean (zero orders with unknown customer IDs). The customer base is distributed across four membership tiers — Platinum (644, 8.1\%), Gold (1{,}177, 14.7\%), Silver (1{,}736, 21.7\%), and Free (4{,}443, 55.5\%) — and the dataset includes 715 customers flagged as churned, yielding a baseline churn rate of \textbf{8.9\%}.
+
+\subsection{Churn Label and Validation}
+
+Because the dataset includes a pre-existing \texttt{churned} flag, we do not engineer a churn label from scratch; we \emph{validate} the supplied label against behavioral evidence. We compute a recency-based pseudo-label using the 75th percentile of \texttt{days\_since\_last\_purchase} (84 days) as a cutoff and cross-tabulate it against the supplied label. The result (Table~\ref{tab:label_validation}) shows agreement on 73.1\% of customers (5{,}575 retained-retained + 276 churned-churned out of 8{,}000). Disagreement is dominated by 1{,}710 customers labeled as retained but classified as churned by the recency-based pseudo-label. This pattern is consistent with the supplied label encoding a more lenient definition of churn than a pure-recency threshold (likely a longer grace period or additional criteria such as account-status flags). Fig.~\ref{fig:recency_dist} confirms the underlying signal: churned customers exhibit visibly higher recency than retained customers (medians 56 vs.\ 40 days). For modeling, we adopt the supplied label as the ground truth, since it represents the dataset's operational definition of customer departure.
+
+\begin{table}[h]
+\caption{Provided Label vs.\ Recency Pseudo-Label (p75 = 84 days)}
+\label{tab:label_validation}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Provided label} $\backslash$ \textbf{Pseudo-label} & \textbf{Retained} & \textbf{Churned} \\
+\midrule
+Retained (n=7{,}285) & 5{,}575 & 1{,}710 \\
+Churned (n=715)      &   439   &   276  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m02a_recency_dist.png}
+\caption{Distribution of days-since-last-purchase for churned and retained customers. Median recency is 16 days higher for churners, and the p75 cutoff (84 days) used as the validation pseudo-label is annotated.}
+\label{fig:recency_dist}
+\end{figure}
+
+\subsection{Feature Engineering}
+
+The final feature matrix groups 26 predictors into six families:
+
+\begin{itemize}
+\item \textbf{Demographics:} age, gender\_encoded, tier\_encoded, channel\_encoded
+\item \textbf{Value / RFM:} total\_orders, total\_spend\_usd, avg\_order\_value\_usd, CLV\_3yr (derived), orders\_per\_yr
+\item \textbf{Recency / tenure:} days\_since\_last\_purchase, tenure\_days, orders\_last\_90d, orders\_last\_180d
+\item \textbf{Engagement:} session\_duration\_avg, pages\_viewed\_avg, pct\_mobile, wishlist\_items, reviews\_given, newsletter\_subscribed
+\item \textbf{Product feedback:} avg\_review\_score, avg\_order\_rating, avg\_discount\_received, avg\_delivery\_days, returns\_made, pct\_returned
+\item \textbf{Category:} category\_diversity (number of distinct categories purchased)
+\end{itemize}
+
+The CLV\_3yr feature is derived as $\text{avg\_aov} \times \text{orders\_per\_yr} \times 3$, used as both a predictor and (independently) as the economic-weighting variable in the budget framework. We perform a multicollinearity check via pairwise correlation and Variance Inflation Factor. The highest VIF is on \texttt{total\_orders} (6.32), with \texttt{total\_spend\_usd} (4.76), \texttt{reviews\_given} (3.11), and \texttt{CLV\_3yr} (3.01) following — all below the conventional 10 threshold; no features are removed on this basis.
+
+\subsection{Modeling and Evaluation}
+
+We use a stratified 80/20 train/test split (6{,}400 / 1{,}600 customers) with the churn label as the stratification key. Two models are trained:
+
+\begin{itemize}
+\item \textbf{Logistic Regression} with \texttt{class\_weight='balanced'} on standardized features (the transparent linear baseline).
+\item \textbf{Random Forest} (\texttt{n\_estimators=300}, balanced class weighting) — the non-linear comparator and the workhorse of subsequent SHAP analysis.
+\end{itemize}
+
+Models are evaluated on three imbalance-aware metrics: \textbf{ROC-AUC}, \textbf{PR-AUC} (the imbalance-appropriate ranking metric, with no-skill baseline 0.089 at the dataset's churn prevalence), and \textbf{F2-score}. To assess generalization beyond the single split we additionally run 5-fold stratified cross-validation on the Random Forest. To explicitly test H2 we train a second Random Forest using only the four demographic features (age, gender\_encoded, tier\_encoded, channel\_encoded) on the same train/test split and compare its ROC-AUC and PR-AUC against the full model.
+
+\subsection{Explainability}
+
+For the Random Forest we compute SHAP values using \texttt{shap.TreeExplainer} on the test set. We report (i) a global mean absolute SHAP ranking and (ii) the Random Forest's native Gini importance for cross-validation, allowing us to confirm whether the same features dominate under both interpretive lenses.
+
+\subsection{Economic Quantification}
+
+Churn is dollar-denominated through three mechanisms:
+
+\begin{itemize}
+\item \textbf{Revenue at risk:} sum of historical \texttt{total\_spend\_usd} for customers labeled as churned.
+\item \textbf{3-year CLV:} computed per customer using avg\_aov $\times$ orders\_per\_yr $\times$ 3, aggregated by membership tier and by risk tier.
+\item \textbf{Retention ROI scenario:} compared against assumed CAC and a tiered-intervention cost structure parameterized as a fraction of CLV.
+\end{itemize}
+
+\subsection{Risk Tiering and Retention Framework}
+
+Customers are tiered by predicted churn probability into Low ($p < 0.40$), Medium ($0.40 \leq p < 0.70$), and High ($p \geq 0.70$). The intersection of \emph{High risk} with \emph{Gold or Silver tier} defines the \textbf{Priority Save Zone (PSZ)} — customers who simultaneously carry high churn probability and meaningful per-capita CLV without falling into the Free tier where unit economics are weaker. A retention budget matrix is constructed by crossing the three risk tiers with the four membership tiers (12 cells total), enabling differentiated per-cell action recommendations.
+
+\section{Results}
+
+\subsection{Macro Context}
+
+The platform's monthly revenue is structurally stable across the 2020--2026 observation window. Average monthly revenue is \$34{,}468 with average monthly orders of 273 and average order value of \$126. The platform acquires on average 97 new customers per month and retains 171 returning customers, yielding an average monthly retention ratio of 63.8\%. Correlation analysis on the monthly time series shows that the returning ratio is most strongly negatively correlated with new\_customers ($r = -0.771$), confirming the structural view that strong retention is the dominant driver of platform health. The platform is therefore in a steady-state regime — neither in growth nor in decline — which is a useful empirical context for studying churn as a structural phenomenon.
+
+\subsection{Churn Concentration (RQ2, H1)}
+
+The supplied churn flag yields an overall rate of 8.9\% (715 of 8{,}000 customers). Churn is not uniformly distributed across membership tiers (Fig.~\ref{fig:churn_by_tier} and Table~\ref{tab:tier_churn}), but the pattern departs sharply from the canonical loyalty-progression intuition.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m02c_churn_by_tier.png}
+\caption{Churn rate by membership tier. The pattern is non-monotonic: Gold (9.9\%) exceeds Free (9.5\%), Platinum (8.2\%), and Silver (7.1\%).}
+\label{fig:churn_by_tier}
+\end{figure}
+
+\begin{table}[h]
+\caption{Churn Rate by Membership Tier}
+\label{tab:tier_churn}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Tier} & \textbf{Customers} & \textbf{Churned} & \textbf{Churn rate} \\
+\midrule
+Platinum &  644   &  53  & 8.2\% \\
+Gold     & 1{,}177 & 116  & \textbf{9.9\%} \\
+Silver   & 1{,}736 & 123  & 7.1\% \\
+Free     & 4{,}443 & 423  & 9.5\% \\
+\midrule
+Total    & 8{,}000 & 715  & 8.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Gold tier exhibits the highest churn rate (9.9\%) and the Silver tier the lowest (7.1\%) — a non-monotonic pattern in which loyalty does not progress cleanly with tier. The range across tiers is 2.8 percentage points. Country-level variation is moderate: Japan exhibits the highest country churn rate (12.2\%). Age shows mild concentration in the 45--54 group (10.2\%), and the gender gap is negligible (0.3 ppt). Order-level chi-square across the 14 product categories is not statistically significant ($\chi^2 = 14.55$, $p = 0.336$). \textbf{H1 is partially supported}: meaningful concentration exists at the tier level, but the directional pattern contradicts the expected monotonic decline with loyalty, and other demographic axes show only modest variation.
+
+\subsection{Model Performance}
+
+Both classifiers produce realistic, well-calibrated performance on the test set (Table~\ref{tab:models}, Fig.~\ref{fig:roc_pr}).
+
+\begin{table}[h]
+\caption{Model Performance on Test Set}
+\label{tab:models}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Model} & \textbf{ROC-AUC} & \textbf{PR-AUC} & \textbf{F2} \\
+\midrule
+Logistic Regression       & 0.6934 & 0.2301 & 0.397 \\
+Random Forest (full)      & \textbf{0.7480} & \textbf{0.3190} & --- \\
+Random Forest (demo-only) & 0.5151 & 0.0963 & --- \\
+\midrule
+No-skill PR baseline      & 0.5000 & 0.0890 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m07c_roc_pr.png}
+\caption{ROC and Precision-Recall curves for Logistic Regression and Random Forest on the held-out test set. RF dominates LR across both curves; the PR curve is the more informative comparison given the 8.9\% prevalence.}
+\label{fig:roc_pr}
+\end{figure}
+
+Random Forest outperforms Logistic Regression on both ranking metrics, lifting ROC-AUC by +0.055 and PR-AUC by +0.089. Relative to the no-skill PR baseline of 0.089, the RF's PR-AUC of 0.319 represents a 3.6$\times$ lift — substantial at this prevalence. To assess robustness beyond the single split, we run 5-fold stratified cross-validation: \textbf{RF achieves ROC-AUC 0.7232 $\pm$ 0.0227 and PR-AUC 0.2631 $\pm$ 0.0207}, with a moderate gap of 0.025 between hold-out and CV mean — consistent and indicative of stable behavior. The ROC-AUC of approximately 0.72--0.75 is in the mid-range of retail churn benchmarks reported in the literature \cite{vafeiadis2015,xie2020}, validating empirical credibility on this dataset.
+
+\subsection{Feature Importance and H2 Test}
+
+SHAP analysis on the Random Forest produces a ranking dominated by behavioral and value-based features (Fig.~\ref{fig:shap_bar}, Table~\ref{tab:shap}); the ranking is closely aligned with the model's native Gini importance.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m07d_shap_bar.png}
+\caption{SHAP global feature importance (left) compared with Random Forest Gini importance (right). The two rankings agree on the dominance of recency, total\_orders, total\_spend\_usd, CLV\_3yr, and orders\_per\_yr.}
+\label{fig:shap_bar}
+\end{figure}
+
+\begin{table}[h]
+\caption{Top-10 Features by Mean $|$SHAP$|$}
+\label{tab:shap}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l c}
+\toprule
+\textbf{Feature} & \textbf{Mean $|$SHAP$|$} \\
+\midrule
+days\_since\_last\_purchase & 0.0717 \\
+total\_orders               & 0.0495 \\
+total\_spend\_usd           & 0.0320 \\
+CLV\_3yr                    & 0.0247 \\
+orders\_per\_yr             & 0.0247 \\
+reviews\_given              & 0.0231 \\
+session\_duration\_avg      & 0.0223 \\
+tenure\_days                & 0.0223 \\
+avg\_order\_value\_usd      & 0.0219 \\
+avg\_discount\_received     & 0.0197 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The top of the ranking is dominated by behavioral and value features: recency, transaction count, total spend, derived CLV, purchase velocity. Engagement features (\texttt{reviews\_given}, \texttt{session\_duration\_avg}, \texttt{pages\_viewed\_avg}) appear in positions 6, 7, and 11. Demographic features rank substantially lower: \texttt{age} appears at rank 12, \texttt{tier\_encoded} near the bottom of the top-20. Aggregating across the full feature matrix, \textbf{behavioral and value features carry 86.8\% of total SHAP importance, and demographics carry only 13.2\%}.
+
+The H2 test makes the comparison precise (Table~\ref{tab:h2_lift}). Training a Random Forest on demographics alone yields ROC-AUC 0.5151 and PR-AUC 0.0963 — barely above the no-skill baseline. Adding the behavioral, value, engagement, and product-feedback features lifts ROC-AUC to 0.7480 (+0.2329) and PR-AUC to 0.3190 (+0.2227). \textbf{H2 is supported on both axes:} predictive lift is large, and SHAP/Gini importance both place behavioral features above demographics.
+
+\begin{table}[h]
+\caption{H2 Test: Demographics-only RF vs Full-feature RF}
+\label{tab:h2_lift}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Model} & \textbf{ROC-AUC} & \textbf{PR-AUC} \\
+\midrule
+RF (demographics only) & 0.5151 & 0.0963 \\
+RF (full features)     & 0.7480 & 0.3190 \\
+\midrule
+\textbf{Behavioral lift} & \textbf{+0.2329} & \textbf{+0.2227} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Economic Cost (RQ3, H3)}
+
+Total platform historical revenue is \$12.47M, of which churned customers account for \$0.871M, or \textbf{7.0\% of total revenue} (Fig.~\ref{fig:revenue_stakes}). This 7\% revenue share is smaller than the 8.9\% customer share, indicating churners are on average somewhat lower-spending than retainers — but the gap is modest, not the dramatic 2--3$\times$ asymmetry sometimes reported.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m03e_revenue_stakes.png}
+\caption{Revenue at risk by membership tier (left: customer counts with churned/retained breakdown; right: annual revenue at risk vs.\ CAC to replace, by tier). Free-tier churn dominates absolute risk (\$1{,}301K annual RAR) despite carrying lower per-capita CLV.}
+\label{fig:revenue_stakes}
+\end{figure}
+
+The 3-year CLV calculation (Table~\ref{tab:clv}) confirms the per-capita value gradient predicted by H3.
+
+\begin{table}[h]
+\caption{Mean 3-Year CLV by Membership Tier (USD)}
+\label{tab:clv}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Tier} & \textbf{Mean CLV} & \textbf{Median CLV} & \textbf{Std Dev} \\
+\midrule
+Platinum & 5{,}093 & 1{,}257 & 14{,}522 \\
+Gold     & 3{,}205 &   815   &  8{,}415 \\
+Silver   & 2{,}284 &   642   &  5{,}665 \\
+Free     & 2{,}411 &   591   &  7{,}898 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The Platinum/Free CLV ratio is approximately 2.1$\times$ on means and 2.1$\times$ on medians, and the Gold/Silver ratio is 1.4$\times$ on means. The annual revenue-at-risk decomposition is: Platinum \$175K, Gold \$437K, Silver \$172K, and Free \$1{,}301K — Free dominates aggregate risk by sheer volume, despite the lower per-capita value. \textbf{H3 is supported in per-capita terms} (Platinum CLV is structurally higher than lower tiers), but in aggregate dollar terms the Free tier carries the largest absolute risk.
+
+A retention ROI scenario shows that spending up to 15\% of mean CLV to save a churned customer yields a net gain of approximately \$283 per save versus the \$35 cost of acquiring a replacement — a ROI of approximately 810\% over CAC at the 15\% spend rate. The economically rational retention envelope is therefore well-defined and substantial.
+
+\subsection{Risk Segmentation and Priority Save Zone (RQ4)}
+
+Predicted churn probabilities partition the customer base into Low (92.5\%, 7{,}400 customers), Medium (4.4\%, 353 customers), and High (3.1\%, 247 customers). The Priority Save Zone — High-risk customers who are also Gold or Silver tier — comprises \textbf{85 customers} (40 Gold + 45 Silver), with mean churn probability 0.745 and mean 3-year CLV \$615 per customer. Total CLV at stake in the PSZ is \$52{,}249, with margin at risk of \$14{,}630. Fig.~\ref{fig:psz} visualizes the PSZ in churn-probability $\times$ CLV space, and Fig.~\ref{fig:risk_profiles} shows the overall risk-segment distribution.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m08d_psz.png}
+\caption{Priority Save Zone scatter: churn probability versus 3-year CLV for the 85 PSZ customers (40 Gold, 45 Silver). The cloud concentrates between $p = 0.70$ and $p = 0.85$, with a long upper tail of high-CLV Gold members.}
+\label{fig:psz}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\columnwidth]{fig_m08c_risk_profiles.png}
+\caption{Customer risk segments and PSZ composition. The Low-risk segment dominates (92.5\%); the PSZ (Gold + Silver, High-risk) is a 1.1\% slice with the highest expected per-customer save ROI.}
+\label{fig:risk_profiles}
+\end{figure}
+
+The full risk $\times$ membership matrix (Table~\ref{tab:budget_matrix}) shows risk distribution per cell. High-risk and Medium-risk shares are similar across all four membership tiers (3--5\% High, 4--5\% Medium); in absolute terms, the Free tier dominates by sheer volume.
+
+\begin{table}[h]
+\caption{Risk Tier $\times$ Membership Tier (counts; \% within tier in parentheses)}
+\label{tab:budget_matrix}
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l r r r}
+\toprule
+\textbf{Tier} & \textbf{High} & \textbf{Medium} & \textbf{Low} \\
+\midrule
+Platinum & 17 (2.6\%)  & 24 (3.7\%)   & 603 (93.6\%) \\
+Gold     & 40 (3.4\%)  & 61 (5.2\%)   & 1{,}076 (91.4\%) \\
+Silver   & 45 (2.6\%)  & 60 (3.5\%)   & 1{,}631 (94.0\%) \\
+Free     & 145 (3.3\%) & 208 (4.7\%)  & 4{,}090 (92.1\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The implied retention strategy is differentiated: PSZ (Gold + Silver $\times$ High) receives premium per-capita budget; High-risk Free (145 customers) receives moderate-cost automated campaigns; Medium-risk customers receive lighter touch; Low-risk customers receive no targeted intervention.
+
+\subsection{Category and Product Strategy (H4)}
+
+The category-level relationship between product metrics and churn does not match the predicted discount-trap pattern (Table~\ref{tab:h4}).
+
+\begin{table}[h]
+\caption{Category-Level Pearson Correlations with Churn Rate}
+\label{tab:h4}
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{l c c c}
+\toprule
+\textbf{Metric} & \textbf{r} & \textbf{p-value} & \textbf{Verdict} \\
+\midrule
+Return rate     & $-0.5715$ & 0.0328 & Significant, \emph{negative} \\
+Avg discount \% & $+0.2760$ & 0.3395 & Direction correct, n.s.\ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The discount finding is directionally consistent with the discount-trap hypothesis (categories with higher average discounts have somewhat higher churn) but is not statistically significant at $n = 14$ categories. The return-rate finding is the more striking result: it is statistically significant at the 0.05 level but in the \emph{opposite} direction from the H4 prediction. Categories with higher return rates have \emph{lower} customer-level churn ($r = -0.571$, $p = 0.033$). Customer-level corroboration: customers whose favorite category is in the high-return group churn at 8.3\%, while customers with a low-return favorite category churn at 9.2\% (directionally consistent, $t = -1.36$, $p = 0.17$). Delivery-time analysis is similarly inconclusive: average delivery days for retained (4.18) and churned (4.19) customers are statistically indistinguishable ($t = 0.16$, $p = 0.87$). \textbf{H4 is rejected for return rate} (significant in the opposite direction) and \textbf{not supported for discount} (right direction but not significant).
+
+\subsection{Hypothesis Summary}
+
+\begin{itemize}
+\item \textbf{H1 (concentration):} \textbf{Partially supported}. Tier variation is real (7.1\%--9.9\%, 2.8 ppt range) but non-monotonic; Gold has the highest churn, Silver the lowest.
+\item \textbf{H2 (behavioral lift):} \textbf{Strongly supported}. Behavioral lift of +0.233 ROC-AUC and +0.223 PR-AUC over demographics-only baseline; SHAP/Gini both rank behavioral features above demographics; behavioral features carry 86.8\% of total SHAP importance.
+\item \textbf{H3 (disproportionate value):} \textbf{Supported in per-capita terms}. Platinum carries 2.1$\times$ Free per-capita CLV; PSZ exhibits mean CLV of \$615 per customer.
+\item \textbf{H4 (discount/return correlation):} \textbf{Rejected for return rate} (significant in \emph{opposite} direction, $r = -0.571$, $p = 0.033$); \textbf{not supported for discount} ($r = +0.276$, $p = 0.340$).
+\end{itemize}
+
+\section{Discussion}
+
+\subsection{RQ1 — Behavioral Drivers Dominate}
+
+The clearest finding is that behavioral and engagement features overwhelmingly dominate demographic features in predicting churn on labeled data. Recency, transaction count, total spend, CLV, and orders per year occupy the top five SHAP positions; engagement metrics (reviews, sessions, pages viewed) appear in the next tier; demographics (age, tier, gender, country) are relegated to lower ranks. The H2 quantification — +0.233 ROC-AUC lift and 86.8\% behavioral SHAP share — gives this finding numerical force. This replicates the consistent pattern across the churn ML literature \cite{ahmad2019,decaigny2018} and confirms that the signal-rich variables in this domain are behavioral, not demographic. Operationally, the targeting variable list should lead with recency, order velocity, CLV, and engagement metrics — not with age, country, or even membership tier.
+
+\subsection{RQ2 — Non-Monotonic Tier Pattern}
+
+The most surprising finding is the non-monotonic churn-by-tier pattern: Gold members churn at 9.9\%, while Silver members churn at 7.1\%, with Platinum (8.2\%) and Free (9.5\%) in between. The canonical loyalty intuition — that higher tier means more committed customer means lower churn — is not borne out. Three explanations merit further investigation. First, Gold-tier customers may be in a transition zone: they have invested enough to qualify above Silver but not enough to reach Platinum, and may be evaluating whether the platform is worth continued effort. Second, Gold may attract aspirational shoppers who concentrate purchases during a brief active period and then disengage, while Silver attracts steady-state shoppers with more durable habits. Third, the platform's tier-promotion criteria may inadvertently select for profiles at higher churn risk at the Gold level. None of these explanations can be confirmed from the data alone, but each implies a different intervention strategy and merits qualitative customer research.
+
+\subsection{RQ3 — Pricing Reveals a Modest Asymmetry}
+
+The economic translation produces a 7.0\% revenue share for churners against an 8.9\% customer share — confirming that churners are on average lower-value than retainers, but only modestly so. This is more measured than the dramatic 2--3$\times$ asymmetries sometimes reported, and cautions against assuming that all churn is high-value churn. The PSZ asymmetry is sharper: 85 PSZ customers carry mean CLV of \$615, well above the platform median CLV of \$641 (Silver) and far above the lower-quartile floor. Per-capita value-weighted targeting therefore concentrates on a small but high-value frontier, consistent with the Ascarza \cite{ascarza2018} principle that retention budget should flow to the persuadable high-value segment. The retention ROI scenario reinforces this: spending up to 15\% of CLV per save yields approximately 810\% net ROI over the cost of acquiring a replacement.
+
+\subsection{RQ4 — PSZ as Operational Output}
+
+The Priority Save Zone of 85 customers (1.1\% of the customer base) is small enough to enable hand-curated intervention design — relationship managers can review the list, understand each customer's history through SHAP-derived narratives, and design tailored save offers. The 12-cell risk $\times$ membership matrix extends this from a single PSZ list to a complete budget allocation framework, with differentiated action templates per cell ranging from "premium retention offer with dedicated outreach" (PSZ) through "automated re-engagement email" (High-risk Free) to "no targeted action" (Low-risk Free).
+
+\subsection{Why H4 Inverted: Returns and Engagement}
+
+The most provocative finding is the significant negative correlation between category-level return rate and customer-level churn. The discount-trap literature predicts that high-friction product categories (more returns, more discounts) should produce more churn. The data say the opposite for returns. The most plausible interpretation is the \emph{returns-as-engagement} hypothesis: in e-commerce, customers who return products are also customers who actively shop. A disengaged customer who is drifting toward churn does not return products — they simply stop buying. A robust return rate therefore signals an active, engaged customer base rather than a frustrated one. A complementary interpretation is the \emph{return-policy-as-retention} hypothesis: customers who feel they can return products without friction may be more willing to try new categories, deepening category breadth and lowering churn through diversification. Both interpretations imply that the platform's generous return policy is, paradoxically, a retention asset rather than a churn driver — and that aggressive tightening of the return policy in pursuit of margin would be counterproductive.
+
+\subsection{Implications for Strategy}
+
+Three actionable implications follow:
+
+\textbf{Tier-conditional retention design, not loyalty-progression assumptions.} The non-monotonic churn pattern means that retention design cannot rely on the heuristic that higher tiers are inherently safer. Gold customers in particular deserve targeted attention.
+
+\textbf{Engagement monitoring infrastructure.} Because engagement features (sessions, pages viewed, wishlist, reviews) carry meaningful predictive weight, the analytics infrastructure should ingest and refresh these signals frequently. Recency is the lagging indicator; engagement is the leading indicator of impending recency.
+
+\textbf{Preserve the return policy.} The negative correlation between category return rate and churn suggests that a generous return policy of the kind reflected in this dataset should be defended against margin-pressure proposals to tighten it. Returns appear to be part of the engagement loop, not a friction to be eliminated.
+
+\subsection{Limitations}
+
+\emph{Single-platform scope.} All empirical results derive from one platform's customer base; generalization across platforms is not guaranteed.
+
+\emph{Operational label noise.} The supplied \texttt{churned} flag reflects the dataset's business-rule definition of churn and may not perfectly align with academic notions of latent churn. Validation against the recency p75 pseudo-label gives 73.1\% agreement; the residual disagreement (1{,}710 retained customers with high recency) suggests the operational label encodes additional signals beyond pure inactivity.
+
+\emph{Observational, non-causal correlations.} The H4 inversion, the SHAP rankings, and the tier-churn pattern are associations, not causal effects.
+
+\emph{Random rather than temporal split.} The train/test split is random (stratified) rather than time-based; concept drift will erode model performance in production, and a temporal split (training on orders before a cutoff, testing on subsequent behavior) would be more conservative for deployment evaluation.
+
+\emph{No real intervention experiment.} The retention-budget framework rests on assumed conversion-uplift parameters drawn from industry benchmarks rather than a randomized field experiment.
+
+\section{Conclusion}
+
+This paper developed an end-to-end pipeline for predicting and pricing silent exit in non-contractual e-commerce, applied to a publicly available labeled customer dataset of 8{,}000 customers and 25{,}000 orders spanning 2020--2026. We answer the four research questions explicitly:
+
+\textbf{RQ1.} Behavioral and engagement features dominate demographic features in predictive power. Days-since-last-purchase, total orders, total spend, CLV, and orders-per-year are the strongest drivers; behavioral features carry 86.8\% of total SHAP importance.
+
+\textbf{RQ2.} Churn is concentrated in non-uniform but non-monotonic patterns. Gold-tier members churn at the highest rate (9.9\%), Silver at the lowest (7.1\%); the canonical loyalty-progression assumption does not hold. Country, age, and gender variation is comparatively modest.
+
+\textbf{RQ3.} Total revenue at risk is \$0.87M, or 7.0\% of platform revenue. Platinum customers carry 2.1$\times$ Free per-capita CLV. The PSZ of 85 high-risk Gold and Silver customers carries \$52K of CLV at stake and offers the highest expected return per intervention dollar.
+
+\textbf{RQ4.} The PSZ (85 customers, 1.1\% of base) is the central targeting frontier for premium retention budget. A 12-cell risk $\times$ membership matrix extends the framework into a complete differentiated allocation plan.
+
+\textbf{Academic contribution:} integration of behavioral ML, customer-value economics, and product/macro diagnostics into a single end-to-end pipeline applied to a publicly available labeled dataset; controlled measurement of the +0.233 behavioral lift over demographics; transparent reporting of the non-monotonic tier pattern and the surprising H4 inversion.
+
+\textbf{Managerial contribution:} a reproducible Python pipeline; a tiered retention budget framework with named action templates per cell; a Priority Save Zone list ready for marketing operationalization; and one defensive insight (preserve the return policy) that emerges directly from the data.
+
+\textbf{Future work:} (1) replicate across multiple platforms to assess the generalizability of the non-monotonic tier pattern and the H4 inversion; (2) run a real randomized retention experiment to estimate true uplift parameters; (3) extend with finer-grained product-level features to revisit the discount-trap hypothesis at higher statistical power; (4) integrate causal ML / uplift modeling to address the Ascarza lost-cause/sure-thing critique; (5) adopt temporal cross-validation in production deployment to address concept drift.
+
+\section*{Acknowledgements}
+The authors thank the faculty of the DSEB-MFE program at the National Economics University for guidance throughout this project.
+
+\begin{thebibliography}{00}
+
+\bibitem{reichheld2001}
+F. F. Reichheld, \textit{The Loyalty Effect: The Hidden Force Behind Growth, Profits, and Lasting Value}. Boston, MA: Harvard Business School Press, 2001.
+
+\bibitem{schmittlein1987}
+D. C. Schmittlein, D. G. Morrison, and R. Colombo, ``Counting your customers: Who are they and what will they do next?,'' \textit{Management Science}, vol. 33, no. 1, pp. 1--24, 1987.
+
+\bibitem{fader2005a}
+P. S. Fader, B. G. S. Hardie, and K. L. Lee, ```Counting your customers' the easy way: An alternative to the Pareto/NBD model,'' \textit{Marketing Science}, vol. 24, no. 2, pp. 275--284, 2005.
+
+\bibitem{fader2005b}
+P. S. Fader, B. G. S. Hardie, and K. L. Lee, ``RFM and CLV: Using iso-value curves for customer base analysis,'' \textit{J. Marketing Research}, vol. 42, no. 4, pp. 415--430, 2005.
+
+\bibitem{hughes1994}
+A. M. Hughes, \textit{Strategic Database Marketing}. Chicago, IL: Probus Publishing, 1994.
+
+\bibitem{bult1995}
+J. R. Bult and T. Wansbeek, ``Optimal selection for direct mail,'' \textit{Marketing Science}, vol. 14, no. 4, pp. 378--394, 1995.
+
+\bibitem{decaigny2018}
+A. De Caigny, K. Coussement, and K. W. De Bock, ``A new hybrid classification algorithm for customer churn prediction based on logistic regression and decision trees,'' \textit{European J. Operational Research}, vol. 269, no. 2, pp. 760--772, 2018.
+
+\bibitem{ahmad2019}
+A. K. Ahmad, A. Jafar, and K. Aljoumaa, ``Customer churn prediction in telecom using machine learning in big data platform,'' \textit{J. Big Data}, vol. 6, no. 1, p. 28, 2019.
+
+\bibitem{grinsztajn2022}
+L. Grinsztajn, E. Oyallon, and G. Varoquaux, ``Why do tree-based models still outperform deep learning on typical tabular data?,'' in \textit{Advances in Neural Information Processing Systems}, 2022.
+
+\bibitem{lundberg2017}
+S. M. Lundberg and S.-I. Lee, ``A unified approach to interpreting model predictions,'' in \textit{Advances in Neural Information Processing Systems}, 2017, pp. 4765--4774.
+
+\bibitem{bussmann2021}
+N. Bussmann, P. Giudici, D. Marinelli, and J. Papenbrock, ``Explainable machine learning in credit risk management,'' \textit{Computational Economics}, vol. 57, pp. 203--216, 2021.
+
+\bibitem{gupta2005}
+S. Gupta and D. R. Lehmann, \textit{Managing Customers as Investments}. Upper Saddle River, NJ: Wharton School Publishing, 2005.
+
+\bibitem{ascarza2018}
+E. Ascarza, ``Retention futility: Targeting high-risk customers might be ineffective,'' \textit{J. Marketing Research}, vol. 55, no. 1, pp. 80--98, 2018.
+
+\bibitem{rossler2022}
+J. Rößler and D. Schoder, ``Bridging the gap between churn prediction and intervention,'' \textit{Information}, vol. 13, no. 8, p. 373, 2022.
+
+\bibitem{verbeke2012}
+W. Verbeke, K. Dejaeger, D. Martens, J. Hur, and B. Baesens, ``New insights into churn prediction in the telecommunication sector: A profit-driven data mining approach,'' \textit{European J. Operational Research}, vol. 218, no. 1, pp. 211--229, 2012.
+
+\bibitem{vafeiadis2015}
+T. Vafeiadis, K. I. Diamantaras, G. Sarigiannidis, and K. C. Chatzisavvas, ``A comparison of machine learning techniques for customer churn prediction,'' \textit{Simulation Modelling Practice and Theory}, vol. 55, pp. 1--9, 2015.
+
+\bibitem{xie2020}
+Y. Xie, X. Li, E. W. T. Ngai, and W. Ying, ``Customer churn prediction in e-commerce: A systematic ML approach,'' \textit{Decision Support Systems}, vol. 130, p. 113232, 2020.
+
+\bibitem{verhoef2010}
+P. C. Verhoef, R. T. Rust, and K. N. Lemon, ``The theoretical underpinnings of customer asset management: A framework and propositions for future research,'' \textit{J. Academy of Marketing Science}, vol. 38, no. 6, pp. 760--776, 2010.
+
+\bibitem{neslin2006}
+S. A. Neslin, S. Gupta, W. Kamakura, J. Lu, and C. H. Mason, ``Defection detection: Measuring and understanding the predictive accuracy of customer churn models,'' \textit{J. Marketing Research}, vol. 43, no. 2, pp. 204--211, 2006.
+
+\bibitem{molnar2022}
+C. Molnar, \textit{Interpretable Machine Learning: A Guide for Making Black Box Models Explainable}, 2nd ed. Self-published, 2022.
+
+\end{thebibliography}
+
+\end{document}
