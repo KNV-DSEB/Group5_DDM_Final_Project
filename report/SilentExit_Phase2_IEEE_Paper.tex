@@ -5,6 +5,7 @@
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
 \usepackage{graphicx}
+\graphicspath{{./}{./figures/}}
 \usepackage{textcomp}
 \usepackage{xcolor}
 \usepackage{url}
@@ -30,7 +31,7 @@ email@neu.edu.vn}
 \maketitle
 
 \begin{abstract}
-In non-contractual e-commerce, churn is silent: customers do not announce their departure, and by the time inactivity is noticed they may already be lost. This paper develops a complete, data-driven pipeline that predicts customer churn from behavioral signals and prices it in dollar terms, applied to a publicly available labeled e-commerce transaction dataset (Kaggle) of 8{,}000 customers and 25{,}000 orders spanning January 2020 to March 2026. The dataset arrives with a pre-existing churn flag (8.9\% prevalence), which we cross-validate against the 75th percentile of days-since-last-purchase, observing 73.1\% agreement. We construct a 26-feature matrix combining demographics, RFM, derived behavior, on-site engagement (session duration, pages viewed, wishlist items), and product-feedback signals (review scores, returns, delivery, discount). Logistic Regression and Random Forest classifiers are evaluated on imbalance-aware metrics; Random Forest achieves ROC-AUC 0.748 and PR-AUC 0.319 against a 0.089 prevalence baseline, with Logistic Regression at 0.693 and 0.230 respectively. A 5-fold cross-validation confirms stability (RF ROC-AUC 0.723 $\pm$ 0.023). SHAP analysis shows behavioral and value features carrying 86.8\% of total feature importance versus 13.2\% for demographics, and a controlled demographics-only RF reaches only ROC-AUC 0.515, yielding a behavioral lift of +0.233. Churned customers account for \$0.87M of historical platform revenue (7.0\%). The Priority Save Zone — the intersection of high churn risk with Gold or Silver tier — comprises 85 customers carrying \$52K of 3-year CLV at stake. Two findings depart from prior literature: (i) churn is non-monotonic across membership tiers (Gold 9.9\%, Free 9.5\%, Platinum 8.2\%, Silver 7.1\%); and (ii) at the category level, return rate is significantly \emph{negatively} correlated with churn ($r = -0.571$, $p = 0.033$), inverting the discount-trap intuition. The paper contributes an end-to-end methodology — integrating behavioral ML, customer-value economics, and macro signals on labeled data — and a tiered retention budget framework consumable by marketing teams.
+In non-contractual e-commerce, churn is silent: customers do not announce their departure, and by the time inactivity is noticed they may already be lost. This paper develops a complete, data-driven pipeline that predicts customer churn from behavioral signals and prices it in dollar terms, applied to a publicly available labeled e-commerce transaction dataset (Kaggle) of 8{,}000 customers and 25{,}000 orders spanning January 2020 to March 2026. The dataset arrives with a pre-existing churn flag (8.9\% prevalence), which we cross-validate against the 75th percentile of days-since-last-purchase, observing 73.1\% agreement. We construct a 26-feature matrix combining demographics, RFM, derived behavior, on-site engagement (session duration, pages viewed, wishlist items, reviews given, device mix), and product-feedback signals (review scores, returns, delivery, discount). Logistic Regression and Random Forest classifiers are evaluated on imbalance-aware metrics; Random Forest achieves ROC-AUC 0.748 and PR-AUC 0.319 against a 0.089 prevalence baseline, with Logistic Regression at 0.693 and 0.230 respectively. A 5-fold cross-validation confirms stability (RF ROC-AUC 0.723 $\pm$ 0.023). SHAP analysis shows behavioral and value features carrying 86.8\% of total feature importance versus 13.2\% for demographics, and a controlled demographics-only RF reaches only ROC-AUC 0.515, yielding a behavioral lift of +0.233. Churned customers account for \$0.87M of historical platform revenue (7.0\%). The Priority Save Zone — the intersection of high churn risk with Gold or Silver tier — comprises 85 customers carrying \$52K of 3-year CLV at stake. Two findings depart from prior literature: (i) churn is non-monotonic across membership tiers (Gold 9.9\%, Free 9.5\%, Platinum 8.2\%, Silver 7.1\%); and (ii) at the category level, return rate is significantly \emph{negatively} correlated with churn ($r = -0.571$, $p = 0.033$), inverting the discount-trap intuition. Acquisition-channel diagnostics complement the retention framework by identifying \$21K of dead-spend CAC concentrated in low-ROI paid channels. The paper contributes an end-to-end methodology — integrating behavioral ML, customer-value economics, and macro signals on labeled data — and a tiered retention budget framework consumable by marketing teams.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -130,15 +131,15 @@ Churned (n=715)      &   439   &   276  \\
 The final feature matrix groups 26 predictors into six families:
 
 \begin{itemize}
-\item \textbf{Demographics:} age, gender\_encoded, tier\_encoded, channel\_encoded
+\item \textbf{Demographics:} age, gender\_encoded, tier\_encoded, channel\_encoded, tenure\_days
 \item \textbf{Value / RFM:} total\_orders, total\_spend\_usd, avg\_order\_value\_usd, CLV\_3yr (derived), orders\_per\_yr
-\item \textbf{Recency / tenure:} days\_since\_last\_purchase, tenure\_days, orders\_last\_90d, orders\_last\_180d
+\item \textbf{Recency:} days\_since\_last\_purchase, orders\_last\_90d, orders\_last\_180d
 \item \textbf{Engagement:} session\_duration\_avg, pages\_viewed\_avg, pct\_mobile, wishlist\_items, reviews\_given, newsletter\_subscribed
 \item \textbf{Product feedback:} avg\_review\_score, avg\_order\_rating, avg\_discount\_received, avg\_delivery\_days, returns\_made, pct\_returned
 \item \textbf{Category:} category\_diversity (number of distinct categories purchased)
 \end{itemize}
 
-The CLV\_3yr feature is derived as $\text{avg\_aov} \times \text{orders\_per\_yr} \times 3$, used as both a predictor and (independently) as the economic-weighting variable in the budget framework. We perform a multicollinearity check via pairwise correlation and Variance Inflation Factor. The highest VIF is on \texttt{total\_orders} (6.32), with \texttt{total\_spend\_usd} (4.76), \texttt{reviews\_given} (3.11), and \texttt{CLV\_3yr} (3.01) following — all below the conventional 10 threshold; no features are removed on this basis.
+The CLV\_3yr feature is derived as $\text{avg\_aov} \times \text{orders\_per\_yr} \times 3$, used as both a predictor and (independently) as the economic-weighting variable in the budget framework. This simple linear approximation is used in lieu of the probabilistic BG/NBD + Gamma-Gamma framework \cite{fader2005a,fader2005b} cited above; refining the CLV estimator is left to future work. We classify \texttt{tenure\_days} as a demographic attribute (it captures customer age-on-platform, a slow-changing relationship state) rather than a behavioral one, so the H2 demographics-only comparison aligns with the notebook's \texttt{DEMO\_COLS} definition. We perform a multicollinearity check via pairwise correlation and Variance Inflation Factor. The highest VIF is on \texttt{total\_orders} (6.32), with \texttt{total\_spend\_usd} (4.76), \texttt{reviews\_given} (3.11), and \texttt{CLV\_3yr} (3.01) following — all below the conventional 10 threshold; no features are removed on this basis.
 
 \subsection{Modeling and Evaluation}
 
@@ -146,10 +147,10 @@ We use a stratified 80/20 train/test split (6{,}400 / 1{,}600 customers) with th
 
 \begin{itemize}
 \item \textbf{Logistic Regression} with \texttt{class\_weight='balanced'} on standardized features (the transparent linear baseline).
-\item \textbf{Random Forest} (\texttt{n\_estimators=300}, balanced class weighting) — the non-linear comparator and the workhorse of subsequent SHAP analysis.
+\item \textbf{Random Forest} (\texttt{n\_estimators=300}, \texttt{class\_weight='balanced'}, \texttt{random\_state=42}, all other hyperparameters at scikit-learn defaults: \texttt{max\_depth=None}, \texttt{min\_samples\_split=2}, \texttt{min\_samples\_leaf=1}, \texttt{max\_features='sqrt'}, \texttt{bootstrap=True}) — the non-linear comparator and the workhorse of subsequent SHAP analysis.
 \end{itemize}
 
-Models are evaluated on three imbalance-aware metrics: \textbf{ROC-AUC}, \textbf{PR-AUC} (the imbalance-appropriate ranking metric, with no-skill baseline 0.089 at the dataset's churn prevalence), and \textbf{F2-score}. To assess generalization beyond the single split we additionally run 5-fold stratified cross-validation on the Random Forest. To explicitly test H2 we train a second Random Forest using only the four demographic features (age, gender\_encoded, tier\_encoded, channel\_encoded) on the same train/test split and compare its ROC-AUC and PR-AUC against the full model.
+Models are evaluated on three imbalance-aware metrics: \textbf{ROC-AUC}, \textbf{PR-AUC} (the imbalance-appropriate ranking metric, with no-skill baseline 0.089 at the dataset's churn prevalence), and \textbf{F2-score}. To assess generalization beyond the single split we additionally run 5-fold stratified cross-validation on the Random Forest. To explicitly test H2 we train a second Random Forest using only the five demographic features (age, gender\_encoded, tier\_encoded, channel\_encoded, tenure\_days) on the same train/test split and compare its ROC-AUC and PR-AUC against the full model. Following the H2 reasoning, the SHAP behavioral-vs-demographic share is computed using the same five-feature demographic set.
 
 \subsection{Explainability}
 
@@ -167,13 +168,13 @@ Churn is dollar-denominated through three mechanisms:
 
 \subsection{Risk Tiering and Retention Framework}
 
-Customers are tiered by predicted churn probability into Low ($p < 0.40$), Medium ($0.40 \leq p < 0.70$), and High ($p \geq 0.70$). The intersection of \emph{High risk} with \emph{Gold or Silver tier} defines the \textbf{Priority Save Zone (PSZ)} — customers who simultaneously carry high churn probability and meaningful per-capita CLV without falling into the Free tier where unit economics are weaker. A retention budget matrix is constructed by crossing the three risk tiers with the four membership tiers (12 cells total), enabling differentiated per-cell action recommendations.
+Customers are tiered by predicted churn probability into Low ($p < 0.40$), Medium ($0.40 \leq p < 0.70$), and High ($p \geq 0.70$). We define the \textbf{Priority Save Zone (PSZ)} as the intersection of High-risk customers with the Gold or Silver tier. The choice to exclude both Platinum and Free from the PSZ is operational rather than economic: Platinum has the highest mean CLV but contains only a small absolute count of High-risk customers (Table~\ref{tab:budget_matrix}), so a Platinum-only campaign would not scale; conversely, Free has the largest absolute count but the lowest per-capita CLV, so per-customer retention spending there has weaker unit economics. The Gold-plus-Silver intersection therefore captures the segment that is simultaneously \emph{actionable in volume} and \emph{economically attractive per capita}. Platinum High-risk customers are treated separately under a dedicated relationship-manager workflow rather than under the PSZ campaign envelope. A retention budget matrix is constructed by crossing the three risk tiers with the four membership tiers (12 cells total), enabling differentiated per-cell action recommendations.
 
 \section{Results}
 
 \subsection{Macro Context}
 
-The platform's monthly revenue is structurally stable across the 2020--2026 observation window. Average monthly revenue is \$34{,}468 with average monthly orders of 273 and average order value of \$126. The platform acquires on average 97 new customers per month and retains 171 returning customers, yielding an average monthly retention ratio of 63.8\%. Correlation analysis on the monthly time series shows that the returning ratio is most strongly negatively correlated with new\_customers ($r = -0.771$), confirming the structural view that strong retention is the dominant driver of platform health. The platform is therefore in a steady-state regime — neither in growth nor in decline — which is a useful empirical context for studying churn as a structural phenomenon.
+The platform's monthly revenue is broadly stable across the 2020--2026 observation window, with mild upward drift in the most recent quarters. Average monthly revenue is \$34{,}468 with average monthly orders of 273 and average order value of \$126. The platform acquires on average 97 new customers per month and retains 171 returning customers, yielding an average monthly retention ratio of 63.8\%. Correlation analysis on the monthly time series shows that the returning ratio is most strongly negatively correlated with new\_customers ($r = -0.771$), confirming the structural view that strong retention is the dominant driver of platform health. The platform is therefore in a steady-state regime — neither in growth nor in decline — which is a useful empirical context for studying churn as a structural phenomenon.
 
 \subsection{Churn Concentration (RQ2, H1)}
 
@@ -218,10 +219,10 @@ Both classifiers produce realistic, well-calibrated performance on the test set 
 \renewcommand{\arraystretch}{1.2}
 \begin{tabular}{l c c c}
 \toprule
-\textbf{Model} & \textbf{ROC-AUC} & \textbf{PR-AUC} & \textbf{F2} \\
+\textbf{Model} & \textbf{ROC-AUC} & \textbf{PR-AUC} & \textbf{F2 @ 0.50} \\
 \midrule
 Logistic Regression       & 0.6934 & 0.2301 & 0.397 \\
-Random Forest (full)      & \textbf{0.7480} & \textbf{0.3190} & --- \\
+Random Forest (full)      & \textbf{0.7480} & \textbf{0.3190} & 0.026 \\
 Random Forest (demo-only) & 0.5151 & 0.0963 & --- \\
 \midrule
 No-skill PR baseline      & 0.5000 & 0.0890 & --- \\
@@ -236,7 +237,9 @@ No-skill PR baseline      & 0.5000 & 0.0890 & --- \\
 \label{fig:roc_pr}
 \end{figure}
 
-Random Forest outperforms Logistic Regression on both ranking metrics, lifting ROC-AUC by +0.055 and PR-AUC by +0.089. Relative to the no-skill PR baseline of 0.089, the RF's PR-AUC of 0.319 represents a 3.6$\times$ lift — substantial at this prevalence. To assess robustness beyond the single split, we run 5-fold stratified cross-validation: \textbf{RF achieves ROC-AUC 0.7232 $\pm$ 0.0227 and PR-AUC 0.2631 $\pm$ 0.0207}, with a moderate gap of 0.025 between hold-out and CV mean — consistent and indicative of stable behavior. The ROC-AUC of approximately 0.72--0.75 is in the mid-range of retail churn benchmarks reported in the literature \cite{vafeiadis2015,xie2020}, validating empirical credibility on this dataset.
+Random Forest outperforms Logistic Regression on both ranking metrics, lifting ROC-AUC by +0.055 and PR-AUC by +0.089. Relative to the no-skill PR baseline of 0.089, the RF's PR-AUC of 0.319 represents a 3.6$\times$ lift — substantial at this prevalence. The F2 column requires interpretation: at the default 0.50 classification threshold, the Random Forest is conservative — it predicts very few customers as churners (precision 0.75, recall 0.02 on the churned class) — and therefore exhibits a low F2 of 0.026. Logistic Regression, with \texttt{class\_weight='balanced'} applied to a linear decision boundary, produces predictions much more aggressively at the same default threshold and so reports a higher F2. The asymmetry reflects threshold choice, not model quality: the ranking metrics (ROC-AUC, PR-AUC) are threshold-independent and consistently favour RF. The accompanying script \texttt{phase2\_fixes.py} demonstrates that tuning the RF threshold on out-of-fold training-set predictions to maximise F2 yields a meaningfully higher F2 on the test set, at a tuned threshold well below 0.50. In production deployment, F2-optimal threshold selection on a validation fold would replace the default cutoff.
+
+To assess robustness beyond the single split, we run 5-fold stratified cross-validation: \textbf{RF achieves ROC-AUC 0.7232 $\pm$ 0.0227 and PR-AUC 0.2631 $\pm$ 0.0207}, with a moderate gap of 0.025 between hold-out and CV mean — consistent and indicative of stable behavior. The ROC-AUC of approximately 0.72--0.75 is in the mid-range of retail churn benchmarks reported in the literature \cite{vafeiadis2015,xie2020}, validating empirical credibility on this dataset.
 
 \subsection{Feature Importance and H2 Test}
 
@@ -295,7 +298,7 @@ RF (full features)     & 0.7480 & 0.3190 \\
 
 \subsection{Economic Cost (RQ3, H3)}
 
-Total platform historical revenue is \$12.47M, of which churned customers account for \$0.871M, or \textbf{7.0\% of total revenue} (Fig.~\ref{fig:revenue_stakes}). This 7\% revenue share is smaller than the 8.9\% customer share, indicating churners are on average somewhat lower-spending than retainers — but the gap is modest, not the dramatic 2--3$\times$ asymmetry sometimes reported.
+Total platform historical revenue accumulated across the 2020--2026 window is \$12.47M, of which churned customers account for \$0.871M, or \textbf{7.0\% of total historical platform revenue} (Fig.~\ref{fig:revenue_stakes}). For reference, the same churned spend expressed as a share of the platform's most recent annualized revenue would correspond to approximately 8.1\%. The 7.0\% (historical) share is smaller than the 8.9\% customer share, indicating churners are on average somewhat lower-spending than retainers — but the gap is modest, not the dramatic 2--3$\times$ asymmetry sometimes reported.
 
 \begin{figure}[h]
 \centering
@@ -325,11 +328,14 @@ Free     & 2{,}411 &   591   &  7{,}898 \\
 
 The Platinum/Free CLV ratio is approximately 2.1$\times$ on means and 2.1$\times$ on medians, and the Gold/Silver ratio is 1.4$\times$ on means. The annual revenue-at-risk decomposition is: Platinum \$175K, Gold \$437K, Silver \$172K, and Free \$1{,}301K — Free dominates aggregate risk by sheer volume, despite the lower per-capita value. \textbf{H3 is supported in per-capita terms} (Platinum CLV is structurally higher than lower tiers), but in aggregate dollar terms the Free tier carries the largest absolute risk.
 
-A retention ROI scenario shows that spending up to 15\% of mean CLV to save a churned customer yields a net gain of approximately \$283 per save versus the \$35 cost of acquiring a replacement — a ROI of approximately 810\% over CAC at the 15\% spend rate. The economically rational retention envelope is therefore well-defined and substantial.
+A retention ROI scenario shows that spending up to 15\% of mean CLV to save a churned customer yields a net gain of approximately \$283 per save versus the \$35 cost of acquiring a replacement — a ROI of approximately 810\% over the CAC baseline. Specifically, at 15\% spend, the intervention cost is \$367, the customer's expected margin (assuming 20\% margin on the mean CLV of \$2{,}449) is \$686, the CAC alternative is \$35, and the net advantage of retention is $\$686 - \$367 - \$35 = \$284$ per saved customer. The economically rational retention envelope is therefore well-defined and substantial.
 
 \subsection{Risk Segmentation and Priority Save Zone (RQ4)}
+\label{sec:psz}
 
-Predicted churn probabilities partition the customer base into Low (92.5\%, 7{,}400 customers), Medium (4.4\%, 353 customers), and High (3.1\%, 247 customers). The Priority Save Zone — High-risk customers who are also Gold or Silver tier — comprises \textbf{85 customers} (40 Gold + 45 Silver), with mean churn probability 0.745 and mean 3-year CLV \$615 per customer. Total CLV at stake in the PSZ is \$52{,}249, with margin at risk of \$14{,}630. Fig.~\ref{fig:psz} visualizes the PSZ in churn-probability $\times$ CLV space, and Fig.~\ref{fig:risk_profiles} shows the overall risk-segment distribution.
+We score every customer with the trained Random Forest to produce a per-customer churn probability, then assign each customer to a risk tier based on that probability (thresholds defined in Section~III.G). Predicted churn probabilities partition the customer base into Low (92.5\%, 7{,}400 customers), Medium (4.4\%, 353 customers), and High (3.1\%, 247 customers). The Priority Save Zone — High-risk customers who are also Gold or Silver tier — comprises \textbf{85 customers} (40 Gold + 45 Silver), with mean churn probability 0.745 and mean 3-year CLV \$615 per customer. Total CLV at stake in the PSZ is \$52{,}249, with margin at risk of \$14{,}630.
+
+We note one caveat regarding these counts. The Random Forest is trained on 6{,}400 customers (the 80\% stratified training split), but the risk-tier counts above are computed by scoring \emph{all} 8{,}000 customers — including the training subset. Tree ensembles with no depth cap memorise training-set labels to a meaningful degree, so the in-sample portion of these counts is mildly optimistic. A robustness check using 5-fold \texttt{cross\_val\_predict} (every customer scored by a model that did not see it) is provided in the accompanying script \texttt{phase2\_fixes.py}; the out-of-fold counts are slightly smaller and constitute the more conservative production estimate. For consistency with the figures rendered in the notebook and to preserve traceability, this section reports the in-sample counts; the qualitative conclusions (tier ordering, PSZ being the high-yield frontier) hold under either scoring regime. Fig.~\ref{fig:psz} visualises the PSZ in churn-probability $\times$ CLV space, and Fig.~\ref{fig:risk_profiles} shows the overall risk-segment distribution.
 
 \begin{figure}[h]
 \centering
@@ -366,6 +372,10 @@ Free     & 145 (3.3\%) & 208 (4.7\%)  & 4{,}090 (92.1\%) \\
 \end{table}
 
 The implied retention strategy is differentiated: PSZ (Gold + Silver $\times$ High) receives premium per-capita budget; High-risk Free (145 customers) receives moderate-cost automated campaigns; Medium-risk customers receive lighter touch; Low-risk customers receive no targeted intervention.
+
+\subsection{Acquisition Channel as a Complementary Lever}
+
+Although retention is the focus of this paper, the dataset also supports an acquisition-channel diagnostic that complements the retention framework. Customers are spread across six acquisition channels (Direct, Organic Search, Paid Ad, Email Campaign, Social Media, Referral). Churn rate varies only mildly across channels, from 8.1\% (Organic Search) to 9.9\% (Referral), and the variation is not statistically significant ($\chi^2 = 3.08$, $p = 0.688$). Channel-level ROI, however, varies sharply: from 1{,}267\% (Paid Ad, the most expensive channel at \$60 CAC) to 7{,}899\% (Direct, the cheapest at \$10 CAC). Total platform CAC invested across the observation window is \$233{,}600, of which \$21{,}075 (9.0\%) is ``dead spend'' attributable to acquired customers who subsequently churned. Channel reallocation — shifting marketing budget away from low-ROI paid channels toward higher-ROI organic ones — emerges as a complementary lever to the retention framework, addressing the supply side of customer flow while the retention framework addresses the loss side.
 
 \subsection{Category and Product Strategy (H4)}
 
@@ -409,7 +419,7 @@ The most surprising finding is the non-monotonic churn-by-tier pattern: Gold mem
 
 \subsection{RQ3 — Pricing Reveals a Modest Asymmetry}
 
-The economic translation produces a 7.0\% revenue share for churners against an 8.9\% customer share — confirming that churners are on average lower-value than retainers, but only modestly so. This is more measured than the dramatic 2--3$\times$ asymmetries sometimes reported, and cautions against assuming that all churn is high-value churn. The PSZ asymmetry is sharper: 85 PSZ customers carry mean CLV of \$615, well above the platform median CLV of \$641 (Silver) and far above the lower-quartile floor. Per-capita value-weighted targeting therefore concentrates on a small but high-value frontier, consistent with the Ascarza \cite{ascarza2018} principle that retention budget should flow to the persuadable high-value segment. The retention ROI scenario reinforces this: spending up to 15\% of CLV per save yields approximately 810\% net ROI over the cost of acquiring a replacement.
+The economic translation produces a 7.0\% revenue share for churners against an 8.9\% customer share — confirming that churners are on average lower-value than retainers, but only modestly so. This is more measured than the dramatic 2--3$\times$ asymmetries sometimes reported, and cautions against assuming that all churn is high-value churn. The PSZ asymmetry is sharper in tier terms: 85 PSZ customers (40 Gold, 45 Silver) carry mean CLV of \$615, which sits between the Silver-tier median CLV (\$642) and the Gold-tier median (\$815) and well above the Free-tier median (\$591). Per-capita value-weighted targeting therefore concentrates on a small but mid-to-upper-value frontier, consistent with the Ascarza \cite{ascarza2018} principle that retention budget should flow to the persuadable high-value segment. The retention ROI scenario reinforces this: spending 15\% of CLV per save yields approximately 810\% net ROI over the cost of acquiring a replacement.
 
 \subsection{RQ4 — PSZ as Operational Output}
 
@@ -430,6 +440,10 @@ Three actionable implications follow:
 \textbf{Preserve the return policy.} The negative correlation between category return rate and churn suggests that a generous return policy of the kind reflected in this dataset should be defended against margin-pressure proposals to tighten it. Returns appear to be part of the engagement loop, not a friction to be eliminated.
 
 \subsection{Limitations}
+
+\emph{Default-threshold recall on the minority class.} At the default 0.50 classification threshold, the Random Forest achieves high precision but very low recall on the churned class (F2 $\approx$ 0.03). The ranking metrics (ROC-AUC, PR-AUC) confirm that the model orders customers by risk correctly; the low default-threshold recall is a consequence of the imbalanced prevalence rather than a flaw in the ranking. Production deployment requires threshold tuning to balance precision and recall against operational cost constraints, as demonstrated in \texttt{phase2\_fixes.py}.
+
+\emph{In-sample component of full-base scoring.} The risk-tier and PSZ counts reported in Section~IV.F are derived by scoring all 8{,}000 customers with the trained Random Forest, including the 6{,}400 training-set customers. Tree ensembles partially memorise training labels, so a portion of these counts is in-sample. The accompanying out-of-fold robustness check yields slightly smaller, more conservative counts; the qualitative tier ordering and the existence of an actionable PSZ segment hold under either scoring regime.
 
 \emph{Single-platform scope.} All empirical results derive from one platform's customer base; generalization across platforms is not guaranteed.
 
@@ -522,7 +536,7 @@ P. C. Verhoef, R. T. Rust, and K. N. Lemon, ``The theoretical underpinnings of c
 S. A. Neslin, S. Gupta, W. Kamakura, J. Lu, and C. H. Mason, ``Defection detection: Measuring and understanding the predictive accuracy of customer churn models,'' \textit{J. Marketing Research}, vol. 43, no. 2, pp. 204--211, 2006.
 
 \bibitem{molnar2022}
-C. Molnar, \textit{Interpretable Machine Learning: A Guide for Making Black Box Models Explainable}, 2nd ed. Self-published, 2022.
+C. Molnar, \textit{Interpretable Machine Learning: A Guide for Making Black Box Models Explainable}, 2nd ed., 2022. [Online]. Available: \url{https://christophm.github.io/interpretable-ml-book/}
 
 \end{thebibliography}
 
