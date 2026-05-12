@@ -1,4 +1,4 @@
-# PHASE 0 — ACADEMIC FOUNDATION
+# ACADEMIC FOUNDATION
 ## Silent Exit — Using Behavioral Data to Predict and Price E-Commerce Customer Churn (2020–2026)
 
 ---
